@@ -1,0 +1,52 @@
+{
+  "recettes": [
+    {
+      "id": 1,
+      "nom": "salade rouge",
+      "categorie": "Entrées",
+      "ingredients": [" choux rouge","Carottes","4 tomates"],
+      "instructions": "pas necessaire de faire cuire",
+      "image": "./image/OIP.jpg"
+    },
+    {
+      "id": 2,
+      "nom": "crudité",
+      "categorie": "Entrées",
+      "ingredients": ["choux ","tomate","Carottes","oignons"],
+      "instructions": "pas necessaire de faire cuire",
+      "image": "./image/OIP.jpg"
+    },
+    {
+      "id": 3,
+      "nom": "pommes sauter",
+      "categorie": "Plats",
+      "ingredients": ["pommes de terre","huille","viande","condiment"],
+      "instructions": "faire cuire pendant 45min",
+      "image": "./image/OIP.jpg"
+    },
+    {
+      "id": 4,
+      "nom": "eru",
+      "categorie": "Plats",
+      "ingredients": ["feuille de eru","viande","huile rouge"],
+      "instructions": "faire cuire pendant 45min",
+      "image": "./image/OIP.jpg"
+    },
+    {
+      "id": 5,
+      "nom": "gateau",
+      "categorie": "Desserts",
+      "ingredients": ["farine","sucre","lait"],
+      "instructions": "faire cuire au foure",
+      "image": "./image/OIP.jpg"
+    },
+    {
+      "id": 6,
+      "nom": "fuits",
+      "categorie": "Desserts",
+      "ingredients": ["pasteque","ananas","raisin"],
+      "instructions": "pas necessaire de faire cuire",
+      "image": "./image/OIP.jpg"
+    }
+  ]
+}
