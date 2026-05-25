@@ -102,7 +102,7 @@ function AddRecipeForm({ onAjout, onFermer }) {
                   value={formData.categorie}
                   onChange={handleChange}
                 >
-                  <option value="Express">Express (< 1h)</option>
+                  <option value="Express">Express (&lt; 1h)</option>
                   <option value="Standard">Standard (1-3h)</option>
                   <option value="Économique">Économique (3-6h)</option>
                   <option value="Programmée">Programmée</option>
