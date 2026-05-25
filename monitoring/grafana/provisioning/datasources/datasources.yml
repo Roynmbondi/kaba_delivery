@@ -1,0 +1,30 @@
+# Configuration des sources de données Grafana
+apiVersion: 1
+
+datasources:
+  # Prometheus comme source principale
+  - name: Prometheus
+    type: prometheus
+    access: proxy
+    url: http://prometheus:9090
+    isDefault: true
+    editable: true
+    jsonData:
+      timeInterval: "5s"
+      queryTimeout: "60s"
+      httpMethod: "POST"
+
+  # Elasticsearch pour les logs
+  - name: Elasticsearch
+    type: elasticsearch
+    access: proxy
+    url: http://elasticsearch:9200
+    database: "kaba-delivery-logs-*"
+    jsonData:
+      interval: "Daily"
+      timeField: "@timestamp"
+      esVersion: "8.11.0"
+      maxConcurrentShardRequests: 5
+      logMessageField: "message"
+      logLevelField: "level"
+    editable: true

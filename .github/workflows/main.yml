@@ -1,0 +1,262 @@
+name: KABA-DELIVERY CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+
+env:
+  NODE_VERSION: '18'
+  REGISTRY: docker.io
+  IMAGE_NAME: kaba-delivery
+
+jobs:
+  # Stage 1: Lint & Test
+  lint-and-test:
+    name: 🧪 Lint & Test
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: 📦 Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: 📋 Install dependencies
+        run: npm ci
+
+      - name: 🔍 Run ESLint
+        run: npm run lint
+
+      - name: 🧪 Run tests with coverage
+        run: npm run test:coverage
+
+      - name: 📊 Upload coverage reports
+        uses: codecov/codecov-action@v3
+        with:
+          file: ./coverage/lcov.info
+          flags: unittests
+          name: codecov-umbrella
+
+  # Stage 2: Code Quality Analysis
+  code-quality:
+    name: 📈 Code Quality Analysis
+    runs-on: ubuntu-latest
+    needs: lint-and-test
+    
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: 📦 Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: 📋 Install dependencies
+        run: npm ci
+
+      - name: 🧪 Run tests for SonarQube
+        run: npm run test:coverage
+
+      - name: 🔍 SonarQube Quality Gate check
+        uses: sonarqube-quality-gate-action@master
+        timeout-minutes: 5
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        with:
+          scanMetadataReportFile: target/sonar/report-task.txt
+
+      - name: 📊 SonarQube Scan
+        uses: sonarsource/sonarqube-scan-action@master
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+
+  # Stage 3: Security Scan
+  security-scan:
+    name: 🔒 Security Scan
+    runs-on: ubuntu-latest
+    needs: lint-and-test
+    
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+
+      - name: 🔍 Run Trivy vulnerability scanner in repo mode
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: 'fs'
+          scan-ref: '.'
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+
+      - name: 📊 Upload Trivy scan results to GitHub Security tab
+        uses: github/codeql-action/upload-sarif@v2
+        if: always()
+        with:
+          sarif_file: 'trivy-results.sarif'
+
+  # Stage 4: Build & Push Docker Image
+  build-and-push:
+    name: 🐳 Build & Push Docker Image
+    runs-on: ubuntu-latest
+    needs: [code-quality, security-scan]
+    if: github.event_name == 'push'
+    
+    outputs:
+      image-digest: ${{ steps.build.outputs.digest }}
+      image-tag: ${{ steps.meta.outputs.tags }}
+    
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+
+      - name: 🔧 Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: 🔑 Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: 🏷️ Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ secrets.DOCKER_USERNAME }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=sha,prefix={{branch}}-
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: 🔨 Build and push Docker image
+        id: build
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: 🔍 Run Trivy vulnerability scanner on image
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ${{ env.REGISTRY }}/${{ secrets.DOCKER_USERNAME }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
+          format: 'sarif'
+          output: 'trivy-image-results.sarif'
+
+      - name: 📊 Upload Trivy image scan results
+        uses: github/codeql-action/upload-sarif@v2
+        if: always()
+        with:
+          sarif_file: 'trivy-image-results.sarif'
+
+  # Stage 5: Deploy to O2Switch
+  deploy-production:
+    name: 🚀 Deploy to Production (O2Switch)
+    runs-on: ubuntu-latest
+    needs: build-and-push
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    environment: production
+    
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+
+      - name: 🚀 Deploy to O2Switch via SSH
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: ${{ secrets.O2SWITCH_HOST }}
+          username: ${{ secrets.O2SWITCH_USER }}
+          key: ${{ secrets.O2SWITCH_SSH_KEY }}
+          port: ${{ secrets.O2SWITCH_PORT || 22 }}
+          script: |
+            # Connexion à Docker Hub
+            echo "${{ secrets.DOCKER_PASSWORD }}" | docker login -u "${{ secrets.DOCKER_USERNAME }}" --password-stdin
+            
+            # Arrêter et supprimer l'ancien conteneur
+            docker stop kaba-delivery || true
+            docker rm kaba-delivery || true
+            
+            # Supprimer l'ancienne image
+            docker rmi ${{ secrets.DOCKER_USERNAME }}/kaba-delivery:latest || true
+            
+            # Télécharger la nouvelle image
+            docker pull ${{ secrets.DOCKER_USERNAME }}/kaba-delivery:latest
+            
+            # Lancer le nouveau conteneur
+            docker run -d \
+              --name kaba-delivery \
+              --restart unless-stopped \
+              -p 3000:3000 \
+              -e NODE_ENV=production \
+              -e PORT=3000 \
+              ${{ secrets.DOCKER_USERNAME }}/kaba-delivery:latest
+            
+            # Vérifier que le conteneur fonctionne
+            sleep 10
+            docker ps | grep kaba-delivery
+            
+            # Test de santé
+            curl -f http://localhost:3000 || exit 1
+            
+            # Nettoyer les images non utilisées
+            docker system prune -f
+
+      - name: 📧 Notify deployment success
+        if: success()
+        run: |
+          echo "✅ Deployment to O2Switch successful!"
+          echo "🌐 Application available at: ${{ secrets.PRODUCTION_URL }}"
+
+      - name: 📧 Notify deployment failure
+        if: failure()
+        run: |
+          echo "❌ Deployment to O2Switch failed!"
+          echo "🔍 Check the logs for more details."
+
+  # Stage 6: Post-deployment tests
+  post-deployment-tests:
+    name: 🧪 Post-deployment Tests
+    runs-on: ubuntu-latest
+    needs: deploy-production
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+
+      - name: 🔍 Health Check
+        run: |
+          # Attendre que l'application soit prête
+          sleep 30
+          
+          # Test de santé de base
+          curl -f ${{ secrets.PRODUCTION_URL }} || exit 1
+          
+          # Test des endpoints critiques (à adapter selon votre API)
+          # curl -f ${{ secrets.PRODUCTION_URL }}/api/health || exit 1
+
+      - name: 📊 Performance Test (basic)
+        run: |
+          # Test de performance basique avec curl
+          for i in {1..5}; do
+            time curl -s ${{ secrets.PRODUCTION_URL }} > /dev/null
+          done

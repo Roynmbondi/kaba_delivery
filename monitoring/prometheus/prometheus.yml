@@ -1,0 +1,57 @@
+# Configuration Prometheus pour KABA-DELIVERY
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+# Configuration des règles d'alerte
+rule_files:
+  - "rules/*.yml"
+
+# Configuration des cibles de scraping
+scrape_configs:
+  # Prometheus lui-même
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+
+  # Node Exporter pour les métriques système
+  - job_name: 'node-exporter'
+    static_configs:
+      - targets: ['node-exporter:9100']
+    scrape_interval: 5s
+    metrics_path: /metrics
+
+  # cAdvisor pour les métriques des conteneurs
+  - job_name: 'cadvisor'
+    static_configs:
+      - targets: ['cadvisor:8080']
+    scrape_interval: 5s
+    metrics_path: /metrics
+
+  # Application KABA-DELIVERY (si elle expose des métriques)
+  - job_name: 'kaba-delivery'
+    static_configs:
+      - targets: ['kaba-delivery:3000']
+    scrape_interval: 10s
+    metrics_path: /metrics
+    scrape_timeout: 5s
+
+  # Elasticsearch
+  - job_name: 'elasticsearch'
+    static_configs:
+      - targets: ['elasticsearch:9200']
+    scrape_interval: 30s
+    metrics_path: /_prometheus/metrics
+
+# Configuration des alertes
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets:
+          # - alertmanager:9093
+
+# Configuration du stockage
+storage:
+  tsdb:
+    retention.time: 15d
+    retention.size: 10GB
