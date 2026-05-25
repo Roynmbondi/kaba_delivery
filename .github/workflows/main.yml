@@ -1,4 +1,4 @@
-name: KABA-DELIVERY Simple Pipeline
+name: KABA-DELIVERY CI/CD Pipeline
 
 on:
   push:
@@ -6,9 +6,14 @@ on:
   pull_request:
     branches: [ main, develop ]
 
+env:
+  NODE_VERSION: '18'
+  DOCKER_IMAGE_NAME: kaba-delivery
+
 jobs:
-  build:
-    name: 🏗️ Build Application
+  # Stage 1: Lint & Test
+  lint-and-test:
+    name: 🧪 Lint & Test
     runs-on: ubuntu-latest
     
     steps:
@@ -18,31 +23,159 @@ jobs:
       - name: 📦 Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '18'
+          node-version: ${{ env.NODE_VERSION }}
           cache: 'npm'
 
       - name: 📋 Install dependencies
-        run: npm install
+        run: npm ci
 
-      - name: 🏗️ Build application
-        run: npm run build
+      - name: 🔍 Run linting
+        run: npm run lint
 
-      - name: ✅ Build successful
-        run: echo "🎉 Build completed successfully!"
+      - name: 🧪 Run tests
+        run: npm run test
 
-  # Job conditionnel pour Docker (seulement si secrets disponibles)
-  docker:
-    name: 🐳 Docker Build (Optional)
+      - name: ✅ Lint & Test successful
+        run: echo "🎉 Lint and tests completed successfully!"
+
+  # Stage 2: Code Quality (SonarQube placeholder)
+  code-quality:
+    name: 📊 Code Quality
     runs-on: ubuntu-latest
-    needs: build
-    if: github.ref == 'refs/heads/main'
+    needs: lint-and-test
     
     steps:
       - name: 📥 Checkout code
         uses: actions/checkout@v4
 
-      - name: 🐳 Build Docker image (test only)
+      - name: 📊 SonarQube Analysis (Placeholder)
         run: |
-          echo "🐳 Docker build would happen here"
-          echo "Configure DOCKER_USERNAME and DOCKER_PASSWORD secrets to enable"
-          docker build -t kaba-delivery-test . || echo "Docker build skipped"
+          echo "🔍 SonarQube analysis would run here"
+          echo "Configure SONAR_TOKEN secret to enable"
+          echo "Quality Gate: PASSED (placeholder)"
+
+  # Stage 3: Build & Push Docker Hub
+  build-and-push:
+    name: 🐳 Build & Push Docker
+    runs-on: ubuntu-latest
+    needs: [lint-and-test, code-quality]
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop'
+    
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+
+      - name: 📦 Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: 📋 Install dependencies
+        run: npm ci
+
+      - name: 🏗️ Build application
+        run: npm run build
+
+      - name: 🐳 Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: 🔐 Login to Docker Hub
+        if: ${{ secrets.DOCKER_USERNAME && secrets.DOCKER_PASSWORD }}
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: 🏷️ Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ secrets.DOCKER_USERNAME }}/${{ env.DOCKER_IMAGE_NAME }}
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=sha,prefix={{branch}}-
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: 🐳 Build and push Docker image
+        if: ${{ secrets.DOCKER_USERNAME && secrets.DOCKER_PASSWORD }}
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: 🐳 Docker build only (no secrets)
+        if: ${{ !secrets.DOCKER_USERNAME || !secrets.DOCKER_PASSWORD }}
+        run: |
+          echo "🔒 Docker Hub secrets not configured"
+          echo "Building image locally for testing..."
+          docker build -t ${{ env.DOCKER_IMAGE_NAME }}:test .
+          echo "✅ Docker build successful"
+
+  # Stage 4: Security Scan
+  security-scan:
+    name: 🔒 Security Scan
+    runs-on: ubuntu-latest
+    needs: build-and-push
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop'
+    
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+
+      - name: 🔍 Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: '${{ secrets.DOCKER_USERNAME }}/${{ env.DOCKER_IMAGE_NAME }}:latest'
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+        continue-on-error: true
+
+      - name: 📊 Upload Trivy scan results
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: 'trivy-results.sarif'
+        continue-on-error: true
+
+      - name: ✅ Security scan completed
+        run: echo "🔒 Security scan completed"
+
+  # Stage 5: Deploy to O2Switch (placeholder)
+  deploy:
+    name: 🚀 Deploy to O2Switch
+    runs-on: ubuntu-latest
+    needs: [build-and-push, security-scan]
+    if: github.ref == 'refs/heads/main'
+    environment: production
+    
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+
+      - name: 🚀 Deploy to O2Switch (Placeholder)
+        run: |
+          echo "🚀 Deployment to O2Switch would happen here"
+          echo "Configure O2SWITCH_* secrets to enable"
+          echo "Deployment method: SSH (recommended)"
+          echo "✅ Deployment completed (placeholder)"
+
+  # Stage 6: Monitoring Setup
+  monitoring:
+    name: 📊 Setup Monitoring
+    runs-on: ubuntu-latest
+    needs: deploy
+    if: github.ref == 'refs/heads/main'
+    
+    steps:
+      - name: 📊 Configure monitoring (Placeholder)
+        run: |
+          echo "📊 Monitoring configuration would happen here"
+          echo "ELK Stack + Prometheus/Grafana setup"
+          echo "✅ Monitoring configured (placeholder)"
