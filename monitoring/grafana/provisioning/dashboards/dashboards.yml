@@ -1,0 +1,13 @@
+# Configuration des dashboards Grafana
+apiVersion: 1
+
+providers:
+  - name: 'KABA-DELIVERY Dashboards'
+    orgId: 1
+    folder: 'KABA-DELIVERY'
+    type: file
+    disableDeletion: false
+    updateIntervalSeconds: 10
+    allowUiUpdates: true
+    options:
+      path: /var/lib/grafana/dashboards

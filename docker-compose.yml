@@ -1,0 +1,35 @@
+version: '3.8'
+
+services:
+  # Application principale
+  kaba-delivery:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: production
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # JSON Server pour le développement (simulation API)
+  json-server:
+    image: typicode/json-server:latest
+    ports:
+      - "3001:3000"
+    volumes:
+      - ./Royn_Mbondi_CookBook_React/cookbook/db.json:/data/db.json
+    command: --watch /data/db.json --host 0.0.0.0 --port 3000
+    restart: unless-stopped
+
+networks:
+  default:
+    name: kaba-delivery-network

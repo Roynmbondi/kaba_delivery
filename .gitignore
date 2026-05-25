@@ -50,3 +50,11 @@ temp/
 *.pem
 *.key
 !mock.key
+
+# SonarQube
+.sonarqube/
+.scannerwork/
+
+# Monitoring
+monitoring/data/
+monitoring/logs/

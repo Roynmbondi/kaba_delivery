@@ -1,0 +1,65 @@
+# Configuration Filebeat pour KABA-DELIVERY
+filebeat.inputs:
+- type: log
+  enabled: true
+  paths:
+    - /usr/share/filebeat/logs/*.log
+    - /usr/share/filebeat/logs/**/*.log
+  fields:
+    service: kaba-delivery
+    environment: production
+  fields_under_root: true
+  multiline.pattern: '^\d{4}-\d{2}-\d{2}'
+  multiline.negate: true
+  multiline.match: after
+
+- type: container
+  enabled: true
+  paths:
+    - '/var/lib/docker/containers/*/*.log'
+  processors:
+    - add_docker_metadata:
+        host: "unix:///var/run/docker.sock"
+
+# Configuration des processeurs
+processors:
+  - add_host_metadata:
+      when.not.contains.tags: forwarded
+  - add_cloud_metadata: ~
+  - add_docker_metadata: ~
+  - add_kubernetes_metadata: ~
+
+# Configuration de sortie vers Elasticsearch
+output.elasticsearch:
+  hosts: ["${ELASTICSEARCH_HOST:elasticsearch:9200}"]
+  index: "kaba-delivery-logs-%{+yyyy.MM.dd}"
+  template.name: "kaba-delivery"
+  template.pattern: "kaba-delivery-*"
+  template.settings:
+    index.number_of_shards: 1
+    index.codec: best_compression
+
+# Configuration Kibana
+setup.kibana:
+  host: "${KIBANA_HOST:kibana:5601}"
+
+# Configuration des templates
+setup.template.settings:
+  index.number_of_shards: 1
+  index.codec: best_compression
+  _source.enabled: true
+
+# Configuration des dashboards
+setup.dashboards.enabled: true
+
+# Logging
+logging.level: info
+logging.to_files: true
+logging.files:
+  path: /var/log/filebeat
+  name: filebeat
+  keepfiles: 7
+  permissions: 0644
+
+# Monitoring
+monitoring.enabled: false

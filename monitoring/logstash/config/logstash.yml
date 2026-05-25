@@ -1,0 +1,16 @@
+# Configuration Logstash pour KABA-DELIVERY
+http.host: "0.0.0.0"
+xpack.monitoring.enabled: false
+pipeline.workers: 2
+pipeline.batch.size: 125
+pipeline.batch.delay: 50
+
+# Configuration des logs
+log.level: info
+path.logs: /usr/share/logstash/logs
+
+# Configuration des données
+path.data: /usr/share/logstash/data
+
+# Configuration des plugins
+path.plugins: /usr/share/logstash/plugins
